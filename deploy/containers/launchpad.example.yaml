@@ -1,0 +1,12 @@
+# Copy to the private config volume as /app/config/launchpad.yaml.
+# Supply auth_password separately through the operator's credential store.
+region: us-west-2
+run_mode: prod
+allow_open_console: false
+auth_username: admin
+auth_registration_enabled: false
+auth_cookie_secure: true
+studio_local_exec_enabled: false
+studio_exec_backend: subprocess
+update_enabled: false
+resources: {}

@@ -354,7 +354,12 @@ def ensure_skill_lab(
     return {**skill_lab_resources, "python": python}
 
 
-def run_bootstrap(region: str | None = None) -> dict[str, Any]:
+def run_bootstrap(
+    region: str | None = None,
+    *,
+    configure_observability: bool = True,
+    provision_skill_lab: bool = True,
+) -> dict[str, Any]:
     """Full bootstrap pass. Returns a summary of what was created vs reused."""
     region = region or get_settings().region
     outputs = get_stack_outputs(region)
@@ -440,19 +445,22 @@ def run_bootstrap(region: str | None = None) -> dict[str, Any]:
             ensure_transaction_search,
         )
 
-        ensure_spans_resource_policy(_client("logs", region), account_id, region)
-        observability_summary = ensure_transaction_search(_client("xray", region))
+        if configure_observability:
+            ensure_spans_resource_policy(_client("logs", region), account_id, region)
+            observability_summary = ensure_transaction_search(_client("xray", region))
 
     # Skill Lab exec worker (vendored SkillOpt): role + content-addressed image
     # + runtime, plus the dedicated host venv the vendored CLIs run in. The
     # first run includes a CodeBuild image build (~10 min); later runs are a
     # tag lookup.
-    skill_lab_summary = ensure_skill_lab(
-        account_id, region, dict(config.get("resources") or {})
-    )
-    write_config(
-        {"resources": {k: v for k, v in skill_lab_summary.items() if k != "python"}}
-    )
+    skill_lab_summary = None
+    if provision_skill_lab:
+        skill_lab_summary = ensure_skill_lab(
+            account_id, region, dict(config.get("resources") or {})
+        )
+        write_config(
+            {"resources": {k: v for k, v in skill_lab_summary.items() if k != "python"}}
+        )
 
     return {
         "skill_lab": skill_lab_summary,

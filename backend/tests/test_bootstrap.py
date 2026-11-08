@@ -164,7 +164,8 @@ def test_run_bootstrap_continues_and_clears_registry_ids(monkeypatch):
     assert resources["memory_id"] == "memory-id"
 
 
-def test_run_bootstrap_gateway_does_not_provision_policy(monkeypatch):
+@pytest.mark.parametrize("optional_resources", [True, False])
+def test_run_bootstrap_gateway_does_not_provision_policy(monkeypatch, optional_resources):
     from app.services import gateway_bootstrap
 
     outputs = {
@@ -260,21 +261,34 @@ def test_run_bootstrap_gateway_does_not_provision_policy(monkeypatch):
         },
     )
 
-    summary = bs.run_bootstrap("us-west-2")
+    summary = bs.run_bootstrap(
+        "us-west-2",
+        configure_observability=optional_resources,
+        provision_skill_lab=optional_resources,
+    )
 
     assert summary["gateway"] == gateway_summary
     assert "policy" not in summary
-    assert summary["observability"] == {
-        "enabled": True,
-        "changed": False,
-        "status": "ACTIVE",
-    }
-    assert requested_clients.count("xray") == 1
-    # The one Logs call is the aws/spans resource policy Transaction Search
-    # needs, placed before the destination update. Policy decision-span delivery
-    # stays operator-managed: no delivery source, destination or delivery.
-    assert requested_clients.index("logs") < requested_clients.index("xray")
-    logs.put_resource_policy.assert_called_once()
+    if optional_resources:
+        assert summary["observability"] == {
+            "enabled": True,
+            "changed": False,
+            "status": "ACTIVE",
+        }
+        assert summary["skill_lab"] is not None
+        assert requested_clients.count("xray") == 1
+        assert requested_clients.index("logs") < requested_clients.index("xray")
+        logs.put_resource_policy.assert_called_once()
+    else:
+        assert summary["observability"] is None
+        assert summary["skill_lab"] is None
+        assert "logs" not in requested_clients
+        assert "xray" not in requested_clients
+        assert not any(
+            key.startswith("skill_lab_")
+            for entry in written for key in entry.get("resources", {})
+        )
+        logs.put_resource_policy.assert_not_called()
     logs.put_delivery_source.assert_not_called()
     logs.put_delivery_destination.assert_not_called()
     logs.create_delivery.assert_not_called()

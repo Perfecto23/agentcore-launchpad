@@ -1,0 +1,9 @@
+launchpad.example.com {
+  @api path /api /api/* /v1 /v1/* /share /share/*
+  handle @api {
+    reverse_proxy launchpad-backend.launchpad-trial.svc.cluster.local:8000
+  }
+  handle {
+    reverse_proxy launchpad-frontend.launchpad-trial.svc.cluster.local:8080
+  }
+}
