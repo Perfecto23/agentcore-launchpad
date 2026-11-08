@@ -1,0 +1,52 @@
+name: launchpad-trial
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the built backend image}
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      LAUNCHPAD_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set the HTTPS console origin}
+      LAUNCHPAD_AUTH_TRUSTED_PROXIES: '["172.30.247.0/24"]'
+      LAUNCHPAD_AUTH_TRUSTED_PROXY_HOPS: "1"
+    volumes:
+      - data:/app/data
+      - config:/app/config
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+      - /home/launchpad:size=64m,uid=10001,gid=10001,mode=0700
+    networks: [control]
+    cpus: 2
+    mem_limit: 3g
+    pids_limit: 256
+    stop_grace_period: 60s
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to the built frontend image}
+    platform: linux/amd64
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_UPSTREAM: backend:8000
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1/32}
+    ports: ["127.0.0.1:${UI_PORT:-18080}:8080"]
+    tmpfs: [/tmp:size=64m,mode=1777]
+    networks: [control]
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 64
+networks:
+  control:
+    ipam:
+      config:
+        - subnet: 172.30.247.0/24
+volumes:
+  data:
+  config:

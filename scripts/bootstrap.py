@@ -96,6 +96,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Bootstrap AgentCore Launchpad shared infra")
     parser.add_argument("--region", default=None, help="AWS region (default: settings)")
     parser.add_argument("--skip-cdk", action="store_true", help="never invoke cdk deploy")
+    parser.add_argument(
+        "--skip-observability", action="store_true",
+        help="preserve account-wide Transaction Search and Logs resource policies",
+    )
+    parser.add_argument(
+        "--skip-skill-lab", action="store_true",
+        help="leave Skill Lab role, image, Runtime and host venv unprovisioned",
+    )
     args = parser.parse_args()
 
     agentcore_cli_version = ensure_agentcore_cli()
@@ -106,7 +114,11 @@ def main() -> int:
             return 1
         deploy_cdk()
 
-    summary = bs.run_bootstrap(region)
+    summary = bs.run_bootstrap(
+        region,
+        configure_observability=not args.skip_observability,
+        provision_skill_lab=not args.skip_skill_lab,
+    )
 
     registry = summary["registry"]
     rows = [

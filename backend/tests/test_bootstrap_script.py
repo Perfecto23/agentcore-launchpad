@@ -135,7 +135,7 @@ def test_bootstrap_summary_omits_policy_resources(monkeypatch, capsys):
     monkeypatch.setattr(
         bootstrap_script.bs,
         "run_bootstrap",
-        lambda _region: {
+        lambda _region, **_options: {
             "account_id": "111",
             "region": "us-west-2",
             "registry": {
@@ -178,3 +178,32 @@ def test_bootstrap_summary_omits_policy_resources(monkeypatch, capsys):
     assert "policy engine" not in output
     assert "gateway policy" not in output
     assert "gateway traces" not in output
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        (["--skip-observability"], (False, True)),
+        (["--skip-skill-lab"], (True, False)),
+        (["--skip-observability", "--skip-skill-lab"], (False, False)),
+    ],
+)
+def test_bootstrap_skip_flags_reach_resource_plan(monkeypatch, flags, expected):
+    monkeypatch.setattr(bootstrap_script, "ensure_agentcore_cli", lambda: "0.21.1")
+    monkeypatch.setattr(bootstrap_script, "stack_exists", lambda _region: True)
+    observed = []
+
+    class PlanObserved(Exception):
+        pass
+
+    def capture(region, *, configure_observability, provision_skill_lab):
+        observed.append((region, configure_observability, provision_skill_lab))
+        raise PlanObserved
+
+    monkeypatch.setattr(bootstrap_script.bs, "run_bootstrap", capture)
+    monkeypatch.setattr(
+        bootstrap_script.sys, "argv", ["bootstrap.py", "--region", "us-west-2", *flags]
+    )
+    with pytest.raises(PlanObserved):
+        bootstrap_script.main()
+    assert observed == [("us-west-2", *expected)]

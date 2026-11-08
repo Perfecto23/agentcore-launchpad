@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: launchpad-trial
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: launchpad-data
+  namespace: launchpad-trial
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: launchpad-config
+  namespace: launchpad-trial
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: launchpad-backend
+  namespace: launchpad-trial
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: launchpad-backend
+  template:
+    metadata:
+      labels:
+        app: launchpad-backend
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: backend
+        image: launchpad-backend:replace-with-release-tag
+        imagePullPolicy: Never
+        envFrom:
+        - configMapRef:
+            name: launchpad-settings
+        - secretRef:
+            name: launchpad-login
+        env:
+        - name: AWS_EC2_METADATA_DISABLED
+          value: 'true'
+        - name: LAUNCHPAD_RUN_MODE
+          value: prod
+        - name: LAUNCHPAD_AUTH_REGISTRATION_ENABLED
+          value: 'false'
+        - name: LAUNCHPAD_STUDIO_LOCAL_EXEC_ENABLED
+          value: 'false'
+        - name: LAUNCHPAD_UPDATE_ENABLED
+          value: 'false'
+        ports:
+        - name: http
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          periodSeconds: 5
+          failureThreshold: 24
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          periodSeconds: 20
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: config
+          mountPath: /app/config
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: launchpad-data
+      - name: config
+        persistentVolumeClaim:
+          claimName: launchpad-config
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: launchpad-backend
+  namespace: launchpad-trial
+spec:
+  selector:
+    app: launchpad-backend
+  ports:
+  - port: 8000
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: launchpad-frontend
+  namespace: launchpad-trial
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: launchpad-frontend
+  template:
+    metadata:
+      labels:
+        app: launchpad-frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 101
+      containers:
+      - name: frontend
+        image: launchpad-frontend:replace-with-release-tag
+        imagePullPolicy: Never
+        env:
+        - name: BACKEND_UPSTREAM
+          value: launchpad-backend.launchpad-trial.svc.cluster.local:8000
+        ports:
+        - name: http
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: '1'
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: launchpad-frontend
+  namespace: launchpad-trial
+spec:
+  selector:
+    app: launchpad-frontend
+  ports:
+  - port: 8080
+    targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: launchpad-block-instance-metadata
+  namespace: launchpad-trial
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.169.254/32

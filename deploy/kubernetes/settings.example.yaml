@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: launchpad-settings
+  namespace: launchpad-trial
+data:
+  AWS_REGION: us-west-2
+  AWS_DEFAULT_REGION: us-west-2
+  LAUNCHPAD_REGION: us-west-2
+  LAUNCHPAD_ACCOUNT_ID: "REPLACE_WITH_ACCOUNT_ID"
+  LAUNCHPAD_PUBLIC_BASE_URL: https://launchpad.example.com
+  LAUNCHPAD_CORS_ORIGINS: '["https://launchpad.example.com"]'
+  LAUNCHPAD_AUTH_USERNAME: admin
+  LAUNCHPAD_AUTH_COOKIE_SECURE: "true"
+  LAUNCHPAD_AUTH_TRUSTED_PROXIES: '["REPLACE_WITH_CADDY_SOURCE_IP/32"]'
+  LAUNCHPAD_AUTH_TRUSTED_PROXY_HOPS: "1"
+  LAUNCHPAD_MODEL_PRICES_REFRESH_HOURS: "0"
