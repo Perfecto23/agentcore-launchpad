@@ -78,21 +78,31 @@ IPAM subnet 与 `LAUNCHPAD_AUTH_TRUSTED_PROXIES`。
 
 后端在未配置认证时拒绝启动 prod。默认关闭注册和 Studio 本地执行，容器没有
 Docker socket 或额外 Linux capabilities。`AWS_EC2_METADATA_DISABLED=true`
-阻止 SDK 自动使用宿主节点角色；网络层仍须拦截实例元数据访问。云端只注入
-明确批准的独立应用身份。Compose 不提供 AWS 身份；真实 AWS 调用须等待获批的
-凭据、资源配置和 bootstrap 方案。
+阻止 SDK 自动使用宿主节点角色；初始部署在网络层同时拦截 pod 的实例元数据访问。
+Compose 不提供 AWS 身份；真实 AWS 调用使用获批的身份、资源配置和 bootstrap
+方案。
+
+可选的[实例角色接入](../deploy/kubernetes/README.md#approved-instance-role-integration)
+使用既有节点角色 AssumeRole 到一个独立工作区角色。该模式下后端使用 host
+network 和 8100 端口，挂载私有 AWS profile Secret，Service 仍提供 8000。
+这里明确接受共享节点身份：其他取得节点凭据及 ExternalId 的进程也可 AssumeRole。
+启用时将初始 IMDS 阻断策略缩小到前端，后端使用获批宿主／网络控制。此变更只涉及
+部署配置，沿用已有应用镜像。
 
 精确云资源与身份方案获批后，可在具备 bootstrap 前置依赖（含 Node／CDK）的
 操作宿主上，从完整源码 checkout 运行初始 bootstrap：
 
 ```bash
 cd backend
-uv run python ../scripts/bootstrap.py --skip-observability --skip-skill-lab
+uv run python ../scripts/bootstrap.py --skip-cdk --skip-observability --skip-skill-lab
 ```
 
-两个选项保留账号级 observability 设置，并延后 Skill Lab Worker。Bootstrap
-仍会创建或更新 IAM、Cognito、Gateway、Memory 和其他共享资源，这些操作仍须
-获批。完成后只向容器转移获批的生成配置和应用身份。
+先部署已审阅的[基础与访问模板](../deploy/aws/README.md)。生成脚本内联三个受支持
+的 Lambda 资产，移除基础角色的 Marketplace 订阅语句，无需新增 CDKToolkit。
+`--skip-cdk` 保留这一部署路径，其他选项保留账号级 observability 设置并延后
+Skill Lab Worker。Bootstrap 仍会创建或更新共享 AgentCore 资源，执行时沿用精确
+获批方案及已开通的模型。生成脚本记录确定性的 SHA-256 manifest，并拒绝未知
+资产布局。完成后只向容器转移获批的生成配置和应用身份。
 
 ## 代理合同
 

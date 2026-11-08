@@ -90,24 +90,35 @@ both its IPAM subnet and `LAUNCHPAD_AUTH_TRUSTED_PROXIES` together.
 The image refuses an unauthenticated prod startup. Registration and local Studio
 execution are off; the backend has no Docker socket or elevated capabilities.
 `AWS_EC2_METADATA_DISABLED=true` prevents the SDK from silently using a host node
-role; it is not a network firewall. The cloud deployment must also block backend
-network access to instance metadata and deliver only an explicitly approved
-dedicated application identity. Compose supplies no AWS identity. Real AWS calls
-require approved credentials and resource configuration from the bootstrap plan.
+role; it is not a network firewall. The initial deployment also blocks pod access
+to instance metadata. Compose supplies no AWS identity. Real AWS calls require
+the approved identity and resource configuration from the bootstrap plan.
+
+The optional [instance-role integration](../deploy/kubernetes/README.md#approved-instance-role-integration)
+uses the existing node role to assume one dedicated workspace role. Its backend
+uses host networking on port 8100 and a private AWS profile Secret, while the
+Service remains on 8000. That mode explicitly accepts shared node identity;
+other processes with node credentials and the ExternalId can assume the same
+role. Scope the initial IMDS-block policy to the frontend in that mode and apply
+the approved host/network controls to the backend. This deployment-only change
+does not require rebuilding the application images.
 
 After approval of the exact cloud resources and identities, an operator can run
 the initial bootstrap from a full source checkout on the prepared operator host:
 
 ```bash
 cd backend
-uv run python ../scripts/bootstrap.py --skip-observability --skip-skill-lab
+uv run python ../scripts/bootstrap.py --skip-cdk --skip-observability --skip-skill-lab
 ```
 
-These flags preserve account-wide observability settings and defer the Skill Lab
-worker. Bootstrap still creates or updates IAM, Cognito, Gateway, Memory and other
-shared resources; the flags do not remove that approval requirement. Use the full
-checkout with the bootstrap host prerequisites, including Node/CDK. Transfer only
-the approved generated configuration and application identity to the container.
+First deploy the reviewed [rendered base/access templates](../deploy/aws/README.md).
+They inline the three supported Lambda assets, remove the base Marketplace
+subscription statement and need no new CDKToolkit. `--skip-cdk` retains that
+deployment path; the other flags preserve account-wide observability settings
+and defer the Skill Lab worker. Bootstrap still creates or updates shared
+AgentCore resources, so use the exact approved plan and already-enabled model
+access. The renderer records deterministic SHA-256 manifests and rejects unknown
+asset layouts. Transfer only approved configuration and identity to the container.
 
 ## Proxy contract
 

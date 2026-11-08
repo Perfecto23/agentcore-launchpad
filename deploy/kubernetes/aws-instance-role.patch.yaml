@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: launchpad-backend
+  namespace: launchpad-trial
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: backend
+          command:
+            - uv
+            - run
+            - --no-sync
+            - uvicorn
+            - app.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8100"
+            - --no-proxy-headers
+          ports:
+            - $patch: replace
+            - name: http
+              containerPort: 8100
+              protocol: TCP
+          env:
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "false"
+            - name: AWS_PROFILE
+              value: launchpad-trial
+            - name: AWS_CONFIG_FILE
+              value: /var/run/launchpad-aws/config
+          volumeMounts:
+            - name: aws-access
+              mountPath: /var/run/launchpad-aws
+              readOnly: true
+      volumes:
+        - name: aws-access
+          secret:
+            secretName: launchpad-aws-access
+            defaultMode: 0440
+            items:
+              - key: config
+                path: config
