@@ -1,0 +1,6 @@
+[profile launchpad-trial]
+role_arn = REPLACE_WITH_APPROVED_WORKSPACE_ROLE_ARN
+credential_source = Ec2InstanceMetadata
+external_id = REPLACE_FROM_CREDENTIAL_STORE
+region = us-west-2
+duration_seconds = 3600
